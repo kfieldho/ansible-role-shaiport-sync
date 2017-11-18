@@ -1,0 +1,63 @@
+---
+# tasks file for kfieldho.influx
+#
+
+- name: Install Shairport Apt Dependencies
+  sudo: True
+  apt: pkg={{ item }} state=installed update_cache=yes
+  with_items:
+      - build-essential
+      - git
+      - xmltoman
+      - autoconf
+      - automake
+      - libtool
+      - libdaemon-dev
+      - libpopt-dev
+      - libconfig-dev
+      - libasound2-dev
+      - avahi-daemon
+      - libavahi-client-dev
+      - libssl-dev
+
+- name: Fetch Shairport Git Repo
+  git:
+    repo: "{{ shairport_sync_repo }}"
+    dest: "{{ ansible_env.HOME }}/shairport-sync"
+    version: "{{ shairport_sync_version }}"
+
+- name: Pre-configure Shairport Sync
+  command: autoreconf -i -f
+  args:
+    chdir: "{{ ansible_env.HOME }}/shairport-sync"
+    creates: "{{ ansible_env.HOME }}/shairport-sync/INSTALL"
+
+- name: Configure Shairport Sync
+  command: ./configure --with-configfiles --with-avahi --with-alsa --with-ssl=openssl --with-systemd
+  args:
+    chdir: "{{ ansible_env.HOME }}/shairport-sync"
+    creates: "{{ ansible_env.HOME }}/shairport-sync/config.log"
+
+- name: Build Shairport Sync
+  make:
+  args:
+    chdir: "{{ ansible_env.HOME }}/shairport-sync"
+
+- name: Install Shairport Sync
+  sudo: True
+  make:
+  args:
+    chdir: "{{ ansible_env.HOME }}/shairport-sync"
+    target: install
+
+- name: Install Shairport Configuration
+  sudo: True
+  template:
+  args:
+    src: shairport-conf.j2
+    dest: /usr/local/etc/shairport-sync.conf
+    force: yes
+
+- name: Enable Shairport Sync Service
+  sudo: True
+  systemd: name=shairport-sync.service enabled=true state=started daemon_reload=true
